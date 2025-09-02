@@ -1,0 +1,63 @@
+{
+  "name": "codium-extension",
+  "displayName": "AJ AI",
+  "version": "1.0.0",
+  "description": "Local AI system which uses Z.AI and Openrouter API.",
+  "engines": { "vscode": "^1.80.0"},
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:ajaiChatView",
+    "onCommand:ajai.openChat",
+    "onLanguage:javascript",
+    "onLanguage:python",
+    "onLanguage:typescript"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{ 
+        "id": "ajaiPanel", 
+        "title": "AJ AI",
+        "icon": ""
+      }]
+    },
+    "views": {
+      "ajaiPanel": [{ 
+        "id": "ajaiChatView", 
+        "name": "AJ AI Chat",
+        "type":"webview"
+        }]
+    },
+    "commands": [
+      { 
+        "command": "ajai.openChat", 
+        "title": "AJ AI: Open Chat" 
+      }
+    ],
+    "keybindings": [
+      { 
+        "command": "ajai.openChat", 
+        "key": "ctrl+alt+b" 
+      }
+    ],
+    "configuration":{
+      "type":"object",
+      "title": "AJAI",
+      "properties": {
+        "ajai.port":{
+          "type":"number",
+          "default": 27121,
+          "description": "Local Orchestrator port (127.0.0.1)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "lint": "echo skip"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {}
+}
