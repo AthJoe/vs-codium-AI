@@ -26,7 +26,8 @@ function sanitizeDelta(s) {
     .replace(/^\s*(thinking|analysis)\b.*$/i, "")   // line starts with thinking/analysis
     .replace(/\bassistantfinal\b:?/ig, "")          // remove 'assistantfinal' tokens
     .replace(/\b(system|assistant|user):(?!\/\/)/ig, "") // stray role markers
-    .replace(/(?<=\n)- /g, "• "); 
+    .replace(/(?<=\n)- /g, "• ")
+    .replace(/(Thinking…|analysis.*)/gi, ""); // Drop "Thinking", "analysis", long prose
 }
 
 // Existing /complete endpoint (you can keep this if needed)

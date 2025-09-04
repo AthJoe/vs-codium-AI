@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const vscode = require("vscode");
 const http = require("http");
 
@@ -10,7 +12,7 @@ function activate(context) {
   );
 
   // Register chat view
-  const provider = new ChatViewProvider();
+  const provider = new ChatViewProvider(context);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("ajaiChatView", provider, {
       webviewOptions: { retainContextWhenHidden: true }
@@ -19,11 +21,30 @@ function activate(context) {
 }
 
 class ChatViewProvider {
+  constructor(context) {
+    this.context = context;
+  }
   resolveWebviewView(webviewView) {
     this.webviewView = webviewView;
     const webview = webviewView.webview;
-    webview.options = { enableScripts: true };
-    webview.html = getHtml();
+    webview.options = { 
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'src', 'media')]
+    };
+    
+    const scriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'src', 'media', 'main.js')
+    );
+
+    let html = fs.readFileSync(
+      path.join(this.context.extensionPath, 'src', 'media', 'webview.html'),
+      'utf8'
+    );
+
+    // replace the plain src with a webview-safe URI
+    html = html.replace('src="main.js"', `src="${scriptUri}"`);
+    webview.html = html;
+
 
     webview.onDidReceiveMessage(async (msg) => {
       if (msg.type === "ask") {
@@ -38,9 +59,19 @@ class ChatViewProvider {
           webview.postMessage({ type: "error", value: e.message || String(e) });
         }
       }
-      if (msg.type === "insert") {
+      if (msg.type === "applyFix") {
         const editor = vscode.window.activeTextEditor;
-        if (editor) editor.edit(ed => ed.insert(editor.selection.active, msg.text));
+        if (editor) {
+          await editor.edit(editBuilder => {
+            // Replace current selection with AI output
+            const sel = editor.selection;
+            if (!sel.isEmpty) {
+              editBuilder.replace(sel, msg.text);
+            } else {
+              editBuilder.insert(sel.active, msg.text);
+            }
+          });
+        }
       }
     });
   }
@@ -79,61 +110,20 @@ function streamChat(port, body, onDelta) {
 }
 
 // Simple HTML UI
-function getHtml() {
-  return /* html */`
-  <style>
-    body { font: 12px var(--vscode-font-family); color: var(--vscode-foreground); }
-    #wrap { display:flex; flex-direction:column; height:100%; gap:6px; }
-    #log { flex:1; overflow:auto; border:1px solid var(--vscode-editorWidget-border); padding:6px; }
-    #input { display:flex; gap:6px; align-items: center; }
-    textarea { flex:1; height:60px; }
-    button { padding:4px 8px; }
-    .sys { opacity:0.7; }
-    .err { color: var(--vscode-errorForeground); }
-    pre { white-space: pre-wrap; margin:0; }
+function getHtml(context) {
+  const htmlPath = path.join(context.extensionPath, 'src', 'media', 'webview.html');
+  let html = fs.readFileSync(htmlPath, 'utf8');
 
-    /* add a simple spinner */
-    #busy { display:none; }
-    #busy.show { display:inline-block; animation: spin 1s linear infinite; }
-    @keyframes spin { from {transform: rotate(0)} to {transform: rotate(360deg)} }
-  </style>
-  <div id="wrap">
-    <div id="log"></div>
-    <div id="input">
-      <textarea id="q" placeholder="Ask…"></textarea>
-      <button id="ask">Send</button>
-      <span id="busy">⏳</span>
-      <button id="insert">Insert</button>
-    </div>
-  </div>
-  <script>
-    const vscode = acquireVsCodeApi();
-    const log = document.getElementById('log');
-    const q = document.getElementById('q');
-    const busy = document.getElementById('busy');
-    let last = '';
-    function append(cls, text){
-      const d=document.createElement('div'); d.className=cls;
-      const pre=document.createElement('pre'); pre.textContent=text; d.appendChild(pre);
-      log.appendChild(d); log.scrollTop = log.scrollHeight;
-    }
-    document.getElementById('ask').onclick = () => {
-      last = ''; append('sys','You: ' + q.value);
-      busy.classList.add('show');                 // show spinner
-      vscode.postMessage({ type:'ask', text: q.value });
-    };
-    document.getElementById('insert').onclick = () => {
-      if (last) vscode.postMessage({ type:'insert', text: last });
-    };
-    window.addEventListener('message', e => {
-      const m = e.data;
-      if (m.type === 'delta') { last += m.value; }
-      if (m.type === 'done')  { busy.classList.remove('show'); append('', last || '(no output)'); }
-      if (m.type === 'error') { busy.classList.remove('show'); append('err', m.value); }
-      if (m.type === 'status') append('sys', m.value);
-    });
-  </script>`;
+  const baseUri = vscode.Uri.joinPath(context.extensionUri, 'src', 'media');
+  html = html.replace(
+    /(<script\s+src=")(.+?)(">)/g,
+    (m, pre, src, post) =>
+      `${pre}${vscode.Uri.joinPath(baseUri, src)}${post}`
+  );
+
+  return html;
 }
+
 
 
 function deactivate(){}

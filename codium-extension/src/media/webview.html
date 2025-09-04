@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      font: 13px/1.4 var(--vscode-font-family);
+      color: var(--vscode-foreground);
+      margin: 0; padding: 0;
+      height: 100%;
+      display: flex; flex-direction: column;
+    }
+    #log {
+      flex: 1; overflow-y: auto;
+      padding: 12px;
+      background: var(--vscode-editor-background);
+      border-bottom: 1px solid var(--vscode-editorWidget-border);
+    }
+    .msg { margin: 8px 0; }
+    .me { color: var(--vscode-textLink-foreground); }
+    .ai { }
+    .err { color: var(--vscode-errorForeground); }
+
+    #inputBar {
+      display: flex; align-items: center;
+      padding: 8px;
+      background: var(--vscode-sideBar-background);
+      border-top: 1px solid var(--vscode-editorWidget-border);
+    }
+    #q {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--vscode-editorWidget-border);
+      background: var(--vscode-editor-background);
+      color: var(--vscode-foreground);
+      resize: none;
+      min-height: 40px;
+      font: 13px var(--vscode-font-family);
+    }
+    #q:focus { outline: none; border-color: var(--vscode-focusBorder); }
+    #sendBtn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      margin-left: 8px;
+      padding: 4px;
+    }
+    #sendBtn svg {
+      fill: var(--vscode-textLink-foreground);
+      width: 20px; height: 20px;
+    }
+    #applyFix {
+      display:none;
+      margin: 8px; padding: 6px 10px;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+    }
+    #applyFix:hover { background: var(--vscode-button-hoverBackground); }
+
+        /* Chat roles */
+    .msg.me  { background: transparent; margin:10px 0; }
+    .msg.ai  { background: transparent; margin:10px 0; }
+    .msg strong { color: var(--vscode-textLink-foreground); }
+
+    /* Code window card */
+    .codecard {
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 8px 0;
+      background: var(--vscode-editor-background);
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    }
+    .codecard-head {
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 6px 8px;
+      background: var(--vscode-editorWidget-background);
+      border-bottom: 1px solid var(--vscode-editorWidget-border);
+      font-size: 12px;
+    }
+    .dots { display:flex; gap:6px; }
+    .dot { width:10px; height:10px; border-radius:50%; }
+    .dot.red    { background:#ff5f57; }
+    .dot.yellow { background:#febc2e; }
+    .dot.green  { background:#28c840; }
+    .lang { opacity:.7 }
+    .cc-actions button {
+      background: transparent; border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 4px; padding: 2px 8px; cursor: pointer;
+      color: var(--vscode-foreground);
+    }
+    .cc-actions button:hover { background: var(--vscode-editorWidget-background); }
+    .codecard pre {
+      margin:0; padding:10px 12px; overflow:auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+  </style>
+</head>
+<body>
+  <div id="log"></div>
+  <div id="applyFix">💡 Apply Fix to Editor</div>
+  <div id="inputBar">
+    <textarea id="q" placeholder="Ask AJ AI about your code…"></textarea>
+    <button id="sendBtn" title="Send">
+      <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+    </button>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>
