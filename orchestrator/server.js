@@ -61,7 +61,15 @@ app.post("/complete", async (req, res) => {
 
 // NEW /chat endpoint
 app.post("/chat", async (req, res) => {
-  const { message, lang, filePath, prefix, suffix, provider = "openrouter", model = process.env.DEFAULT_MODEL } = req.body;
+  const {
+    message,
+    lang,
+    filePath,
+    prefix,
+    suffix,
+    provider = "openrouter",
+    model = process.env.DEFAULT_MODEL
+  } = req.body;
 
   res.setHeader("Content-Type", "application/x-ndjson");
   res.setHeader("Transfer-Encoding", "chunked");
@@ -69,21 +77,29 @@ app.post("/chat", async (req, res) => {
   try {
     const messages = buildChatPrompt({ message, lang, filePath, prefix, suffix });
 
-    const stream = (provider === "zai")
-      ? callZaiStream(model, messages)
-      : callOpenRouterStream(model, messages);
+    // 🔑 Pick which API to call
+    const stream =
+      provider === "zai"
+        ? callZaiStream(model, messages, process.env.ZAI_API_KEY)
+        : callOpenRouterStream(model, messages, process.env.OPENROUTER_API_KEY);
 
     for await (const delta of stream) {
       const clean = sanitizeDelta(delta);
-      if (clean.trim()) res.write(JSON.stringify({ type: "delta", data: clean }) + "\n");
+      if (clean.trim()) {
+        res.write(JSON.stringify({ type: "delta", data: clean }) + "\n");
+      }
     }
+
     res.write(JSON.stringify({ type: "end", data: {} }) + "\n");
     res.end();
   } catch (e) {
-    res.write(JSON.stringify({ type: "error", data: { message: e.message } }) + "\n");
+    res.write(
+      JSON.stringify({ type: "error", data: { message: e.message } }) + "\n"
+    );
     res.end();
   }
 });
+
 
 function buildChatPrompt({ message, lang, filePath, prefix, suffix }) {
   return [

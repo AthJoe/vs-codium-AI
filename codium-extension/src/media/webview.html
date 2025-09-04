@@ -27,17 +27,32 @@
       background: var(--vscode-sideBar-background);
       border-top: 1px solid var(--vscode-editorWidget-border);
     }
-    #q {
-      flex: 1;
-      padding: 8px 10px;
-      border-radius: 6px;
-      border: 1px solid var(--vscode-editorWidget-border);
+
+    #modelSelect {
+      margin-right: 8px;
+      padding: 6px;
       background: var(--vscode-editor-background);
       color: var(--vscode-foreground);
-      resize: none;
-      min-height: 40px;
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 4px;
       font: 13px var(--vscode-font-family);
     }
+
+    #q{
+      flex:1;
+      padding:10px 12px;
+      border-radius:8px;
+      border:1px solid var(--vscode-editorWidget-border);
+      background:var(--vscode-editor-background);
+      color:var(--vscode-foreground);
+      resize:none;
+      overflow:hidden;           /* no scrollbar */
+      min-height:44px;
+      max-height:160px;          /* stop growing after this */
+      line-height:1.4;
+      font:13px var(--vscode-font-family);
+    }
+
     #q:focus { outline: none; border-color: var(--vscode-focusBorder); }
     #sendBtn {
       background: transparent;
@@ -61,10 +76,45 @@
     }
     #applyFix:hover { background: var(--vscode-button-hoverBackground); }
 
-        /* Chat roles */
-    .msg.me  { background: transparent; margin:10px 0; }
-    .msg.ai  { background: transparent; margin:10px 0; }
-    .msg strong { color: var(--vscode-textLink-foreground); }
+    /* Preserve line breaks for user text */
+    pre.usertext {
+      margin: 0;
+      white-space: pre-wrap;
+      font: 13px var(--vscode-font-family);
+      background: transparent;
+      border: 0;
+      padding: 0;
+    }
+
+    /* User messages */
+    .msg.me{
+      background: rgba(0,122,204,0.08);
+      border:1px solid var(--vscode-textLink-foreground);
+      border-radius:8px;
+      padding:10px 12px;
+      margin:10px 0;
+    }
+    .msg.me strong {
+      color: var(--vscode-textLink-foreground);
+      font-weight: 600;
+    }
+
+    /* AI messages */
+    .msg.ai{
+      background: var(--vscode-editorWidget-background);
+      border:1px solid var(--vscode-editorWidget-border);
+      border-radius:8px;
+      padding:10px 12px;
+      margin:10px 0;
+    }
+    .msg.ai strong {
+      color: var(--vscode-foreground);
+      font-weight: 600;
+    }
+
+    .speaker{
+      font-size:12px; letter-spacing:.4px; opacity:.7; text-transform:uppercase; margin-bottom:6px;
+    }
 
     /* Code window card */
     .codecard {
@@ -102,6 +152,12 @@
 <body>
   <div id="log"></div>
   <div id="applyFix">💡 Apply Fix to Editor</div>
+  <div>
+    <select id="modelSelect">
+      <option value="openrouter">OpenRouter</option>
+      <option value="zai">Z.ai</option>
+    </select>
+  </div>
   <div id="inputBar">
     <textarea id="q" placeholder="Ask AJ AI about your code…"></textarea>
     <button id="sendBtn" title="Send">

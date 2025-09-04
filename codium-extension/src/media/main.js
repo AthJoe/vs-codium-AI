@@ -5,6 +5,76 @@ const sendBtn = document.getElementById('sendBtn');
 const applyFix = document.getElementById('applyFix');
 let last = '';
 
+// --- Auto-grow textarea ---
+function autosize(){
+  q.style.height = 'auto';
+  q.style.height = Math.min(q.scrollHeight, 160) + 'px';
+}
+q.addEventListener('input', autosize);
+setTimeout(autosize, 0);
+
+
+// --- Enter to send; Shift+Enter newline ---
+q.addEventListener('keydown', (e)=>{
+  if (e.key === 'Enter' && !e.shiftKey){
+    e.preventDefault();
+    send();
+  }
+});
+
+sendBtn.onclick = send;
+
+function send(){
+  const text = q.value;
+  if (!text.trim()) return;
+  last = '';
+  appendUser(text);// preserve formatting
+  const model = document.getElementById('modelSelect').value;
+  vscode.postMessage({ type: 'ask', text, model }); // send as-is
+  q.value = '';
+  autosize();
+}
+
+// --- Rendering ---
+function appendUser(text){
+  const wrap = document.createElement('div');
+  wrap.className = 'msg me';
+  const label = document.createElement('div');
+  label.className = 'speaker';
+  label.textContent = 'You';
+  const pre = document.createElement('pre');
+  pre.className = 'usertext';
+  pre.textContent = text;   // keeps newlines
+  wrap.appendChild(label);
+  wrap.appendChild(pre);
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+}
+
+function appendAI(text){
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ai';
+  const label = document.createElement('div');
+  label.className = 'speaker';
+  label.textContent = 'AJ AI';
+  wrap.appendChild(label);
+
+  const blocks = parseBlocks(text);         // your existing robust parser
+  blocks.forEach(b=>{
+    if (b.type === 'code') {
+      wrap.appendChild(createCodeCard(b.lang, b.content));
+    } else if (b.content.trim()){
+      const p = document.createElement('p');
+      p.style.whiteSpace = 'pre-wrap';      // keep AI newlines too
+      p.textContent = b.content.trim();
+      wrap.appendChild(p);
+    }
+  });
+
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+}
+
 // Put this ABOVE append()
 function parseBlocks(raw) {
   const KNOWN = ["python","py","javascript","js","typescript","ts","tsx","jsx","json","html","css","bash","sh","zsh","powershell","ps1","sql","yaml","yml","xml","markdown","md","c","cpp","h","hpp","java","go","rust","rs","php","ruby","rb","kotlin","swift","r","lua","dart","scala","zig","perl","pl"];
@@ -86,21 +156,17 @@ function createCodeCard(lang, codeText) {
 }
 
 
-
 function append(cls, text, speaker) {
   const d = document.createElement('div');
   d.className = 'msg ' + cls;
 
-  // Speaker label
   if (speaker) {
-    const label = document.createElement('strong');
-    label.textContent = speaker + ":";
-    label.style.display = "block";
-    label.style.marginBottom = "4px";
+    const label = document.createElement('div');
+    label.className = 'speaker';
+    label.textContent = speaker;
     d.appendChild(label);
   }
 
-  // Break into blocks (text vs code)
   const blocks = parseBlocks(text);
   blocks.forEach(b => {
     if (b.type === "code") {
@@ -128,19 +194,28 @@ function extractCode(answer) {
 sendBtn.onclick = () => {
   if (!q.value.trim()) return;
   last = '';
-  append('me', "You: " + q.value);
+  appendUser(q.value);   // preserves formatting + adds "You" label
   vscode.postMessage({ type: 'ask', text: q.value });
   q.value = '';
+  autosize();
 };
 
+
+
+// Replace previous append() usage:
 window.addEventListener('message', ev => {
   const m = ev.data;
   if (m.type === 'delta') { last += m.value; }
-  if (m.type === 'done') {
-    append('ai', last || '(no output)');
+  if (m.type === 'done')  {
+    appendAI(last || '(no output)');
     applyFix.style.display = last.trim() ? 'block' : 'none';
   }
-  if (m.type === 'error') { append('err', m.value); }
+  if (m.type === 'error') {
+    const err = document.createElement('div');
+    err.className = 'msg ai';
+    err.innerHTML = '<div class="speaker">AJ AI</div><p style="color:var(--vscode-errorForeground)">' + (m.value || m) + '</p>';
+    log.appendChild(err);
+  }
 });
 
 applyFix.onclick = () => {

@@ -51,7 +51,7 @@ class ChatViewProvider {
         const port = vscode.workspace.getConfiguration().get("ajai.port") || 27121;
         webview.postMessage({ type: "status", value: "Thinking…" });
         try {
-          await streamChat(port, { message: msg.text }, (delta) => {
+          await streamChat(port, { message: msg.text, model: msg.model }, (delta) => {
             webview.postMessage({ type: "delta", value: delta });
           });
           webview.postMessage({ type: "done" });
