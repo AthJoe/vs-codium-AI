@@ -148,7 +148,7 @@ async function* callOpenRouterStream(model, messages) {
       "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ model: model || "gpt-4o-mini", messages, stream: true })
+    body: JSON.stringify({ model: model || "openai/gpt-oss-20b:free", messages, stream: true })
   });
   if (!resp.ok) throw new Error(`OpenRouter ${resp.status}`);
   let buffer = "";
@@ -176,7 +176,7 @@ async function* callZaiStream(model, messages) {
       "Authorization": `Bearer ${process.env.ZAI_API_KEY}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ model: model || "default", messages, stream: true })
+    body: JSON.stringify({ model: model || "glm-4.5-flash", messages, stream: true })
   });
   if (!resp.ok) throw new Error(`Z.ai ${resp.status}`);
   let buf = "";

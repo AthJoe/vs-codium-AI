@@ -3,6 +3,7 @@ const log = document.getElementById('log');
 const q = document.getElementById('q');
 const sendBtn = document.getElementById('sendBtn');
 const applyFix = document.getElementById('applyFix');
+const currentFile = document.getElementById('currentFile');
 let last = '';
 
 // --- Auto-grow textarea ---
@@ -205,6 +206,10 @@ sendBtn.onclick = () => {
 // Replace previous append() usage:
 window.addEventListener('message', ev => {
   const m = ev.data;
+  if (m.type === 'fileInfo') {
+    currentFile.textContent = m.name || '(no file)';
+    return;
+  }
   if (m.type === 'delta') { last += m.value; }
   if (m.type === 'done')  {
     appendAI(last || '(no output)');

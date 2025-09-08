@@ -3,6 +3,21 @@ const path = require('path');
 const vscode = require("vscode");
 const http = require("http");
 
+let currentEditor = vscode.window.activeTextEditor;
+
+function activeFileInfo() {
+  if (!currentEditor) return null;
+  return {
+    name: path.basename(currentEditor.document.fileName),
+    text: currentEditor.document.getText()
+  };
+}
+
+function postFileInfo(webview) {
+  const info = activeFileInfo();
+  if (info) webview.postMessage({ type: "fileInfo", ...info });
+}
+
 function activate(context) {
   // Command: open/focus chat
   context.subscriptions.push(
@@ -13,9 +28,17 @@ function activate(context) {
 
   // Register chat view
   const provider = new ChatViewProvider(context);
+
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("ajaiChatView", provider, {
       webviewOptions: { retainContextWhenHidden: true }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(ed => {
+      currentEditor = ed;
+      if (provider.webviewView) postFileInfo(provider.webviewView.webview);
     })
   );
 }
@@ -23,15 +46,17 @@ function activate(context) {
 class ChatViewProvider {
   constructor(context) {
     this.context = context;
+    this.webviewView = null;
   }
+
   resolveWebviewView(webviewView) {
     this.webviewView = webviewView;
     const webview = webviewView.webview;
-    webview.options = { 
+    webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'src', 'media')]
     };
-    
+
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'src', 'media', 'main.js')
     );
@@ -44,14 +69,20 @@ class ChatViewProvider {
     // replace the plain src with a webview-safe URI
     html = html.replace('src="main.js"', `src="${scriptUri}"`);
     webview.html = html;
-
+    postFileInfo(webview);
 
     webview.onDidReceiveMessage(async (msg) => {
       if (msg.type === "ask") {
         const port = vscode.workspace.getConfiguration().get("ajai.port") || 27121;
+        const fileCtx = activeFileInfo();
         webview.postMessage({ type: "status", value: "Thinking…" });
         try {
-          await streamChat(port, { message: msg.text, model: msg.model }, (delta) => {
+          await streamChat(port, {
+            message: msg.text,
+            model: msg.model,
+            fileName: fileCtx?.name,
+            fileContent: fileCtx?.text
+          }, (delta) => {
             webview.postMessage({ type: "delta", value: delta });
           });
           webview.postMessage({ type: "done" });
@@ -59,6 +90,7 @@ class ChatViewProvider {
           webview.postMessage({ type: "error", value: e.message || String(e) });
         }
       }
+
       if (msg.type === "applyFix") {
         const editor = vscode.window.activeTextEditor;
         if (editor) {
@@ -81,12 +113,12 @@ class ChatViewProvider {
 function streamChat(port, body, onDelta) {
   return new Promise((resolve, reject) => {
     const data = Buffer.from(JSON.stringify(body), "utf8");
-
     const req = http.request(
       { host: "127.0.0.1", port, path: "/chat", method: "POST",
         headers: { "Content-Type": "application/json", "Content-Length": data.length } },
       (res) => {
-        if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`HTTP ${res.statusCode}`));
+        if (res.statusCode < 200 || res.statusCode >= 300)
+          return reject(new Error(`HTTP ${res.statusCode}`));
         let buf = "";
         res.setEncoding("utf8");
         res.on("data", chunk => {
@@ -105,9 +137,12 @@ function streamChat(port, body, onDelta) {
         res.on("end", resolve);
       }
     );
-    req.on("error", reject); req.write(data); req.end();
+    req.on("error", reject);
+    req.write(data);
+    req.end();
   });
 }
+
 
 // Simple HTML UI
 function getHtml(context) {
@@ -123,7 +158,6 @@ function getHtml(context) {
 
   return html;
 }
-
 
 
 function deactivate(){}

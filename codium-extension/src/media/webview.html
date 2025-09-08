@@ -38,6 +38,16 @@
       font: 13px var(--vscode-font-family);
     }
 
+    #currentFile {
+      margin-right: 8px;
+      padding: 6px;
+      background: var(--vscode-editor-background);
+      color: var(--vscode-foreground);
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 4px;
+      font: 13px var(--vscode-font-family);
+    }
+
     #q{
       flex:1;
       padding:10px 12px;
@@ -154,9 +164,12 @@
   <div id="applyFix">💡 Apply Fix to Editor</div>
   <div>
     <select id="modelSelect">
-      <option value="openrouter">OpenRouter</option>
-      <option value="zai">Z.ai</option>
+      <option value="openrouter">openai/gpt-oss-20b:free</option>
+      <option value="zai">glm-4.5-flash</option>
     </select>
+      <span id="currentFile">
+        (no File)
+      </span>
   </div>
   <div id="inputBar">
     <textarea id="q" placeholder="Ask AJ AI about your code…"></textarea>
