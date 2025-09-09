@@ -164,12 +164,13 @@
   <div id="applyFix">💡 Apply Fix to Editor</div>
   <div>
     <select id="modelSelect">
-      <option value="openrouter">openai/gpt-oss-20b:free</option>
-      <option value="zai">glm-4.5-flash</option>
+      <option value="openai/gpt-oss-20b:free" data-provider="openrouter">OpenRouter · GPT-OSS-20B</option>
+      <option value="glm-4.5-flash" data-provider="zai">Z.ai · GLM-4.5-Flash</option>
     </select>
       <span id="currentFile">
         (no File)
       </span>
+      · Thread: <span id="threadHint">new</span>
   </div>
   <div id="inputBar">
     <textarea id="q" placeholder="Ask AJ AI about your code…"></textarea>

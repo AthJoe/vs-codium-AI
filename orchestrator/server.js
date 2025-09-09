@@ -67,15 +67,20 @@ app.post("/chat", async (req, res) => {
     filePath,
     prefix,
     suffix,
+    threadId,
+    history = [],
+    fileName,
+    fileContent,
     provider = "openrouter",
     model = process.env.DEFAULT_MODEL
   } = req.body;
 
+  logRequest("chat", { provider, model, threadId, historyTurns: history.length });
   res.setHeader("Content-Type", "application/x-ndjson");
   res.setHeader("Transfer-Encoding", "chunked");
 
   try {
-    const messages = buildChatPrompt({ message, lang, filePath, prefix, suffix });
+    const messages = buildChatPrompt({ message, lang, filePath, prefix, suffix, threadId, history, fileName, fileContent });
 
     // 🔑 Pick which API to call
     const stream =
@@ -101,32 +106,32 @@ app.post("/chat", async (req, res) => {
 });
 
 
-function buildChatPrompt({ message, lang, filePath, prefix, suffix }) {
+function buildChatPrompt({ message, lang, filePath, prefix, suffix, threadId, history, fileName, fileContent }) {
   return [
     {
       role: "system",
       content:
         "You are AJ’s coding assistant, integrated into VSCodium." +
         "Your role:" +
-        "Provide accurate, concise, and directly usable answers in response to code-related queries." +
-        "When the user asks for help with code, return the corrected or completed code directly, with minimal explanation unless explicitly requested." +
-        "When the user asks a general or conversational question, respond politely but keep it brief." +
+        "Provide accurate, concise, and directly usable answers to code-related queries. When asked for code changes or help, return only the corrected or completed code—no extra explanation unless requested. For general or conversational questions, respond politely and briefly." +
         "Strict rules:" +
-        "Output ONLY the final answer or code. Do NOT include hidden reasoning, analysis, or “thinking” steps." +
+        "Output ONLY the final answer or code—no hidden reasoning, chain-of-thought, or meta-commentary." +
         "Do NOT use meta-phrases like “As an AI assistant” or “I think”." +
         "Do NOT hallucinate APIs or code that won’t run; prefer minimal, correct, and tested patterns." +
         "If you are uncertain, ask a single clarifying question instead of guessing." +
         "If the user asks about math or algorithms, provide correct formulas or code, formatted properly." +
+        "Maintain the style, structure, and conventions of the surrounding code."+
         "Context usage:" +
-        "Use the provided `language`, `filePath`, `prefix`, and `suffix` to generate solutions tailored to the open file and cursor position." +
-        "Suggest the smallest possible edit that achieves the user’s goal." +
-        "Always maintain the style and conventions of the surrounding code." +
+        "Use the available `language`, `filePath`, `prefix`, and `suffix` to tailor solutions to the user’s current file and cursor position. Suggest the smallest possible edit that achieves the goal." +
         "Tone:" +
         "Professional, direct, and respectful." +
         "Friendly but not verbose." +
         "Your purpose is to be a practical, code-first Copilot replacement." +
-        "Remember: The user does not want to see chain-of-thought, “Thinking…”, “analysis”, or role markers like `assistantfinal`. Only deliver the final usable output."
+        "Remember: The user does not want to see chain-of-thought, “Thinking…”, “analysis”, or role markers like `assistantfinal`. Only deliver the final usable output."+
+        `Current thread: #${threadId || "new"}`+
+        `Current file: ${fileName}\n\ ${fileContent}\n`
     },
+    ...history.slice(-50),
     {
       role: "user",
       content: `

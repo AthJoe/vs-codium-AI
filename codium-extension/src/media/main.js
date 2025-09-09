@@ -4,6 +4,7 @@ const q = document.getElementById('q');
 const sendBtn = document.getElementById('sendBtn');
 const applyFix = document.getElementById('applyFix');
 const currentFile = document.getElementById('currentFile');
+const threadHint = document.getElementById('threadHint');
 let last = '';
 
 // --- Auto-grow textarea ---
@@ -19,22 +20,22 @@ setTimeout(autosize, 0);
 q.addEventListener('keydown', (e)=>{
   if (e.key === 'Enter' && !e.shiftKey){
     e.preventDefault();
-    send();
+    sendBtn.onclick();
   }
 });
 
-sendBtn.onclick = send;
+// sendBtn.onclick = send;
 
-function send(){
-  const text = q.value;
-  if (!text.trim()) return;
-  last = '';
-  appendUser(text);// preserve formatting
-  const model = document.getElementById('modelSelect').value;
-  vscode.postMessage({ type: 'ask', text, model }); // send as-is
-  q.value = '';
-  autosize();
-}
+// function send(){
+//   const text = q.value;
+//   if (!text.trim()) return;
+//   last = '';
+//   appendUser(text);// preserve formatting
+//   const model = document.getElementById('modelSelect').value;
+//   vscode.postMessage({ type: 'ask', text, model }); // send as-is
+//   q.value = '';
+//   autosize();
+// }
 
 // --- Rendering ---
 function appendUser(text){
@@ -194,9 +195,21 @@ function extractCode(answer) {
 
 sendBtn.onclick = () => {
   if (!q.value.trim()) return;
+
   last = '';
-  appendUser(q.value);   // preserves formatting + adds "You" label
-  vscode.postMessage({ type: 'ask', text: q.value });
+  appendUser(q.value);                     // show user message
+
+  const sel = document.getElementById('modelSelect');
+  const provider = sel.options[sel.selectedIndex].dataset.provider || 
+                 (sel.value.startsWith('glm') ? 'zai' : 'openrouter');
+  vscode.postMessage({
+    type     : 'ask',
+    text     : q.value,
+    model    : sel.value,                                      // e.g. "glm-4.5-flash"
+    provider : provider,// "zai" or "openrouter"
+    thread   : threadHint.textContent                          // current thread id/label
+  });
+
   q.value = '';
   autosize();
 };
@@ -208,6 +221,11 @@ window.addEventListener('message', ev => {
   const m = ev.data;
   if (m.type === 'fileInfo') {
     currentFile.textContent = m.name || '(no file)';
+    return;
+  }
+  if (m.type === 'threadSet'){
+    threadHint.textContent = m.id.slice(-4);
+    log.innerHTML = '';
     return;
   }
   if (m.type === 'delta') { last += m.value; }

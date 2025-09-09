@@ -19,6 +19,20 @@ function postFileInfo(webview) {
 }
 
 function activate(context) {
+  // Set globalContext for save/load
+  const STORE_KEY = 'ajai.threads';
+  let globalContext = context;
+  let currentThread = null;
+
+  const storedId = context.workspaceState.get('ajai.currentThread');
+  const all = context.workspaceState.get(STORE_KEY, {});
+  if (storedId && all && all[storedId]) {
+    currentThread = all[storedId];
+  } else {
+    currentThread = newThread();
+    saveThread(currentThread);
+  }
+
   // Command: open/focus chat
   context.subscriptions.push(
     vscode.commands.registerCommand("ajai.openChat", async () => {
@@ -28,6 +42,48 @@ function activate(context) {
 
   // Register chat view
   const provider = new ChatViewProvider(context);
+
+  function newThread() {
+    const id = Date.now().toString(36);
+    return { id, history: [] };
+  }
+
+  function saveThread(t) {
+    if (!globalContext) {
+      return;
+    }
+    const all = globalContext.workspaceState.get(STORE_KEY, {});
+    all[t.id] = t;
+    globalContext.workspaceState.update(STORE_KEY, all);
+    globalContext.workspaceState.update('ajai.currentThread', t.id);
+  }
+
+  function pushToHistory(role, content) {
+    if (!currentThread) {
+      currentThread = newThread();
+    }
+    currentThread.history = currentThread.history || [];
+    currentThread.history.push({ role, content });
+    if (currentThread.history.length > 50) {
+      currentThread.history.shift();
+    }
+    saveThread(currentThread);
+  }
+  provider.pushToHistory = pushToHistory;
+  provider.newThread = newThread;
+  provider.saveThread = saveThread;
+  provider.streamChat = streamChat;
+  provider.currentThread = currentThread;
+  provider.postFileInfo = postFileInfo;
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ajai.newThread', () => {
+      currentThread = newThread();
+      if (provider.webviewView) {
+        provider.webviewView.webview.postMessage({ type: 'threadSet', id: currentThread.id });
+      }
+    })
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("ajaiChatView", provider, {
@@ -42,6 +98,7 @@ function activate(context) {
     })
   );
 }
+
 
 class ChatViewProvider {
   constructor(context) {
@@ -73,18 +130,31 @@ class ChatViewProvider {
 
     webview.onDidReceiveMessage(async (msg) => {
       if (msg.type === "ask") {
+        if (typeof this.pushToHistory === 'function') {
+          this.pushToHistory('user', msg.text);
+        }else {
+          console.warn('pushToHistory not available');
+        }
+        let answer = "";
         const port = vscode.workspace.getConfiguration().get("ajai.port") || 27121;
         const fileCtx = activeFileInfo();
         webview.postMessage({ type: "status", value: "Thinking…" });
         try {
           await streamChat(port, {
             message: msg.text,
+            provider: msg.provider,
             model: msg.model,
+            threadId: this.currentThread?.id,
+            history: this.currentThread?.history,
             fileName: fileCtx?.name,
             fileContent: fileCtx?.text
           }, (delta) => {
+            answer += delta;
             webview.postMessage({ type: "delta", value: delta });
           });
+          if (typeof this.pushToHistory === 'function') {
+            this.pushToHistory('assistant', answer);
+          }
           webview.postMessage({ type: "done" });
         } catch (e) {
           webview.postMessage({ type: "error", value: e.message || String(e) });
@@ -112,6 +182,7 @@ class ChatViewProvider {
 // Stream from orchestrator (/chat)
 function streamChat(port, body, onDelta) {
   return new Promise((resolve, reject) => {
+    if (!body.provider) body.provider = body.model.startsWith('glm') ? 'zai' : 'openrouter';
     const data = Buffer.from(JSON.stringify(body), "utf8");
     const req = http.request(
       { host: "127.0.0.1", port, path: "/chat", method: "POST",
