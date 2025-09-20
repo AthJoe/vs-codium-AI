@@ -1,3 +1,4 @@
+// extension.js — patched version
 const fs = require('fs');
 const path = require('path');
 const vscode = require("vscode");
@@ -29,9 +30,77 @@ function activate(context) {
   if (storedId && all && all[storedId]) {
     currentThread = all[storedId];
   } else {
-    currentThread = newThread();
-    saveThread(currentThread);
+    // newThread is declared later, but we can call a minimal version for startup:
+    currentThread = { id: Date.now().toString(36), history: [] };
+    // persist via saveThread once saveThread exists below
   }
+
+  // Register chat view provider instance
+  const provider = new ChatViewProvider(context);
+
+  // Ensure provider has threads array based on stored workspaceState
+  provider.threads = Object.values(all || {});
+  provider.getThreads = () => provider.threads || [];
+  provider.getThreadById = (id) => (provider.threads || []).find(t => t.id === id);
+  provider.currentThread = currentThread;
+
+  function newThread() {
+    const id = Date.now().toString(36);
+    const t = { id, history: [], title: `Thread ${id.slice(-4)}` };
+    // update provider state immediately
+    provider.threads = provider.threads || [];
+    provider.threads.unshift(t); // add to front
+    provider.currentThread = t;
+    currentThread = t;
+    return t;
+  }
+
+  async function saveThread(t) {
+    if (!globalContext) {
+      return;
+    }
+    const allObj = globalContext.workspaceState.get(STORE_KEY, {});
+    allObj[t.id] = t;
+    await globalContext.workspaceState.update(STORE_KEY, allObj);
+    await globalContext.workspaceState.update('ajai.currentThread', t.id);
+
+    // keep provider in sync
+    provider.threads = Object.values(allObj || {});
+    provider.currentThread = t;
+  }
+
+  function pushToHistory(role, content) {
+    if (!currentThread) {
+      currentThread = newThread();
+    }
+    currentThread.history = currentThread.history || [];
+    currentThread.history.push({ role, content, ts: Date.now() });
+    if (currentThread.history.length > 50) {
+      currentThread.history.shift();
+    }
+    // persist and update provider
+    Promise.resolve(saveThread(currentThread)).catch(e => console.warn("saveThread failed", e));
+
+    // Notify webview (if present)
+    try {
+      if (provider && provider.webviewView && provider.webviewView.webview) {
+        provider.webviewView.webview.postMessage({
+          type: 'historyUpdate',
+          thread: currentThread
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to post history update to webview', e);
+    }
+  }
+
+  // Attach helpers to provider instance for resolveWebviewView to use via this.*
+  provider.pushToHistory = pushToHistory;
+  provider.newThread = newThread;
+  provider.saveThread = saveThread;
+  provider.streamChat = streamChat;
+  provider.currentThread = currentThread;
+  provider.postFileInfo = postFileInfo;
 
   // Command: open/focus chat
   context.subscriptions.push(
@@ -40,47 +109,20 @@ function activate(context) {
     })
   );
 
-  // Register chat view
-  const provider = new ChatViewProvider(context);
-
-  function newThread() {
-    const id = Date.now().toString(36);
-    return { id, history: [] };
-  }
-
-  function saveThread(t) {
-    if (!globalContext) {
-      return;
-    }
-    const all = globalContext.workspaceState.get(STORE_KEY, {});
-    all[t.id] = t;
-    globalContext.workspaceState.update(STORE_KEY, all);
-    globalContext.workspaceState.update('ajai.currentThread', t.id);
-  }
-
-  function pushToHistory(role, content) {
-    if (!currentThread) {
-      currentThread = newThread();
-    }
-    currentThread.history = currentThread.history || [];
-    currentThread.history.push({ role, content });
-    if (currentThread.history.length > 50) {
-      currentThread.history.shift();
-    }
-    saveThread(currentThread);
-  }
-  provider.pushToHistory = pushToHistory;
-  provider.newThread = newThread;
-  provider.saveThread = saveThread;
-  provider.streamChat = streamChat;
-  provider.currentThread = currentThread;
-  provider.postFileInfo = postFileInfo;
-
   context.subscriptions.push(
     vscode.commands.registerCommand('ajai.newThread', () => {
-      currentThread = newThread();
+      const t = newThread();
+      // update persistent storage
+      saveThread(t).catch(() => {});
       if (provider.webviewView) {
-        provider.webviewView.webview.postMessage({ type: 'threadSet', id: currentThread.id });
+        provider.webviewView.webview.postMessage({ type: 'threadSet', id: provider.currentThread.id });
+        // also send a threads list update
+        provider.webviewView.webview.postMessage({
+          type: 'threadCreated',
+          thread: provider.currentThread,
+          threads: provider.getThreads(),
+          currentThread: provider.currentThread
+        });
       }
     })
   );
@@ -104,11 +146,20 @@ class ChatViewProvider {
   constructor(context) {
     this.context = context;
     this.webviewView = null;
+    // other instance fields may be attached later in activate()
   }
 
   resolveWebviewView(webviewView) {
     this.webviewView = webviewView;
     const webview = webviewView.webview;
+
+    // send initial state using this.* (instance) — provider variable is not available here
+    webview.postMessage({
+      type: 'init',
+      threads: (typeof this.getThreads === 'function') ? this.getThreads() : (this.threads || []),
+      currentThread: this.currentThread || null
+    });
+
     webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'src', 'media')]
@@ -129,11 +180,12 @@ class ChatViewProvider {
     postFileInfo(webview);
 
     webview.onDidReceiveMessage(async (msg) => {
+      // Ask
       if (msg.type === "ask") {
         if (typeof this.pushToHistory === 'function') {
           this.pushToHistory('user', msg.text);
-        }else {
-          console.warn('pushToHistory not available');
+        } else {
+          console.warn('pushToHistory not available on provider instance');
         }
         let answer = "";
         const port = vscode.workspace.getConfiguration().get("ajai.port") || 27121;
@@ -159,13 +211,14 @@ class ChatViewProvider {
         } catch (e) {
           webview.postMessage({ type: "error", value: e.message || String(e) });
         }
+        return;
       }
 
+      // Apply fix into editor
       if (msg.type === "applyFix") {
         const editor = vscode.window.activeTextEditor;
         if (editor) {
           await editor.edit(editBuilder => {
-            // Replace current selection with AI output
             const sel = editor.selection;
             if (!sel.isEmpty) {
               editBuilder.replace(sel, msg.text);
@@ -174,7 +227,69 @@ class ChatViewProvider {
             }
           });
         }
+        return;
       }
+
+      // New thread request from webview
+      if (msg.type === 'newThread') {
+        try {
+          const thread = (typeof this.newThread === 'function') ? this.newThread() : (function fallbackNewThread(){
+            return { id : String(Date.now()), title: 'New Thread', history: [] };
+          })();
+
+          if (typeof this.saveThread === 'function') {
+            await this.saveThread(thread);
+          }
+
+          // ensure instance pointer is current
+          this.currentThread = thread;
+
+          const threads = (typeof this.getThreads === 'function') ? this.getThreads() : (this.threads || []);
+
+          webview.postMessage({
+            type: 'threadCreated',
+            thread: this.currentThread,
+            threads: threads,
+            currentThread: this.currentThread,
+          });
+        } catch (err) {
+          webview.postMessage({
+            type: 'error',
+            value: err.message || String(err)
+          });
+        }
+        return;
+      }
+
+      // History snapshot request
+      if (msg.type === 'history') {
+        webview.postMessage({
+          type: 'historyUpdate',
+          thread: this.currentThread
+        });
+        return;
+      }
+
+      // Switch thread
+      if (msg.type === 'switchThread') {
+        const id = msg.id;
+        let found = null;
+        if (typeof this.getThreadById === 'function') {
+          found = this.getThreadById(id);
+        } else if (Array.isArray(this.threads)) {
+          found = this.threads.find(t => t.id === id);
+        }
+        if (found) {
+          this.currentThread = found;
+          webview.postMessage({ type: 'historyUpdate', thread: this.currentThread });
+        } else {
+          webview.postMessage({ type: 'error', value: 'Thread not found: ' + id });
+        }
+        return;
+      }
+
+      // unknown message — ignore or log
+      // console.log('unhandled webview message', msg);
     });
   }
 }
@@ -182,7 +297,7 @@ class ChatViewProvider {
 // Stream from orchestrator (/chat)
 function streamChat(port, body, onDelta) {
   return new Promise((resolve, reject) => {
-    if (!body.provider) body.provider = body.model.startsWith('glm') ? 'zai' : 'openrouter';
+    if (!body.provider) body.provider = body.model && body.model.startsWith && body.model.startsWith('glm') ? 'zai' : 'openrouter';
     const data = Buffer.from(JSON.stringify(body), "utf8");
     const req = http.request(
       { host: "127.0.0.1", port, path: "/chat", method: "POST",
@@ -229,7 +344,6 @@ function getHtml(context) {
 
   return html;
 }
-
 
 function deactivate(){}
 module.exports = { activate, deactivate };

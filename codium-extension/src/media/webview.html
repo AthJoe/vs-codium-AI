@@ -48,6 +48,18 @@
       font: 13px var(--vscode-font-family);
     }
 
+    #add-thread-btn {
+      margin-right: 8px;
+      padding: 6px;
+      background: var(--vscode-editor-background);
+      color: var(--vscode-foreground);
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 4px;
+      font: 13px var(--vscode-font-family);
+      pointer-events: auto;
+      -webkit-user-select: none;
+    }
+
     #q{
       flex:1;
       padding:10px 12px;
@@ -170,7 +182,11 @@
       <span id="currentFile">
         (no File)
       </span>
-      · Thread: <span id="threadHint">new</span>
+        Thread: 
+      <span id="threadHint">new</span>
+      <button id="add-thread-btn" title="New thread" style="z-index: 20; cursor: pointer;">
+        ＋
+      </button>
   </div>
   <div id="inputBar">
     <textarea id="q" placeholder="Ask AJ AI about your code…"></textarea>
